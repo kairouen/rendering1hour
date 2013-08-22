@@ -119,7 +119,6 @@ struct Mesh {
 	bool intersect(const Ray &ray, Hitpoint *hitpoint) const {
 		for(int i = 0; i< num_polygons; i++)
 		{
-			// NOTE 一番近い交点を求めること
 			if(polygons[i].intersect(ray, hitpoint)) return true;
 		}
 		return false;

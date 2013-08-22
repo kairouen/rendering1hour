@@ -129,7 +129,54 @@ Color radiance(const Ray &ray, Random *rnd, const int depth) {
 			weight = now_object.color_ / (russian_roulette_probability);
 		}
 	} break;
+	// 屈折率kIorのガラス
+	case REFLECTION_TYPE_ICE: {
+		const Ray reflection_ray = Ray(hitpoint.position_, ray.dir_ - hitpoint.normal_ * 2.0 * dot(hitpoint.normal_, ray.dir_));
+		const bool into = dot(hitpoint.normal_, orienting_normal) > 0.0; // レイがオブジェクトから出るのか、入るのか
 
+		// Snellの法則
+		const double nc = 1.0; // 真空の屈折率
+		const double nt = kIor2; // オブジェクトの屈折率
+		const double nnt = into ? nc / nt : nt / nc;
+		const double ddn = dot(ray.dir_, orienting_normal);
+		const double cos2t = 1.0 - nnt * nnt * (1.0 - ddn * ddn);
+		
+		if (cos2t < 0.0) { // 全反射
+			incoming_radiance = radiance(reflection_ray, rnd, depth+1);
+			weight = now_object.color_ / russian_roulette_probability;
+			break;
+		}
+		// 屈折の方向
+		const Ray refraction_ray = Ray(hitpoint.position_,
+			normalize(ray.dir_ * nnt - hitpoint.normal_ * (into ? 1.0 : -1.0) * (ddn * nnt + sqrt(cos2t))));
+		
+		// SchlickによるFresnelの反射係数の近似を使う
+		const double a = nt - nc, b = nt + nc;
+		const double R0 = (a * a) / (b * b);
+
+		const double c = 1.0 - (into ? -ddn : dot(refraction_ray.dir_, -1.0 * orienting_normal));
+		const double Re = R0 + (1.0 - R0) * pow(c, 5.0); // 反射方向の光が反射してray.dirの方向に運ぶ割合。同時に屈折方向の光が反射する方向に運ぶ割合。
+		const double nnt2 = pow(into ? nc / nt : nt / nc, 2.0); // レイの運ぶ放射輝度は屈折率の異なる物体間を移動するとき、屈折率の比の二乗の分だけ変化する。
+		const double Tr = (1.0 - Re) * nnt2; // 屈折方向の光が屈折してray.dirの方向に運ぶ割合
+		
+		// 一定以上レイを追跡したら屈折と反射のどちらか一方を追跡する。（さもないと指数的にレイが増える）
+		// ロシアンルーレットで決定する。
+		const double probability  = 0.25 + 0.5 * Re;
+		if (depth > 2) {
+			if (rnd->next01() < probability) { // 反射
+				incoming_radiance = radiance(reflection_ray, rnd, depth+1) * Re;
+				weight = now_object.color_ / (probability * russian_roulette_probability);
+			} else { // 屈折
+				incoming_radiance = radiance(refraction_ray, rnd, depth+1) * Tr;
+				weight = now_object.color_ / ((1.0 - probability) * russian_roulette_probability);
+			}
+		} else { // 屈折と反射の両方を追跡
+			incoming_radiance = 
+				radiance(reflection_ray, rnd, depth+1) * Re +
+				radiance(refraction_ray, rnd, depth+1) * Tr;
+			weight = now_object.color_ / (russian_roulette_probability);
+		}
+	} break;
 	}
 
 	return now_object.emission_ + multiply(weight, incoming_radiance);

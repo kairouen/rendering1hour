@@ -87,7 +87,7 @@ void Init(HWND hwnd)
 void Run()
 {
 	// シーンの作成
-	edupt::render(SCREEN_WIDTH, SCREEN_HEIGHT, 64, 2, image);
+	edupt::render(SCREEN_WIDTH, SCREEN_HEIGHT, 2048, 4, image);
 }
 
 // シーンのファイル出力
